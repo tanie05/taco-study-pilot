@@ -1,0 +1,15 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6335:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:
