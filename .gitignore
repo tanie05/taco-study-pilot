@@ -3,4 +3,4 @@ venv
 storage
 .env
 .db
-node_moduless
+node_modules
