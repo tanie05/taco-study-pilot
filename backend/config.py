@@ -19,6 +19,7 @@ class Config:
     QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
     QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "study_chunks")
 
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")  # local LLM used for chat/topics/flashcards
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
     EMBEDDING_DIM = 384  # bge-small-en-v1.5 output dimension; must match Qdrant collection vector size

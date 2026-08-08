@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -6,6 +7,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from config import Config
 from app.services.llm import get_llm
 from app.services.rag import retrieve_chunks
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_json_array(text):
@@ -23,6 +26,12 @@ def generate_topics(workspace_id, sample_chunks):
 
     sample_chunks: list of chunk texts representative of the workspace content
     """
+    logger.info(
+        "generate_topics: workspace %s, sampling %d chunk(s) for %d topic(s)",
+        workspace_id,
+        len(sample_chunks),
+        Config.NUM_TOPICS,
+    )
     context = "\n\n".join(f"- {c}" for c in sample_chunks)
     prompt = f"""Based on the following study material, identify the {Config.NUM_TOPICS} most important topics a student should study.
 
@@ -38,7 +47,9 @@ Return ONLY a JSON array of short topic title strings, e.g. ["Topic A", "Topic B
     ]
     result = llm.invoke(messages)
     titles = _extract_json_array(result.content)
-    return [str(t).strip() for t in titles if str(t).strip()][: Config.NUM_TOPICS]
+    titles = [str(t).strip() for t in titles if str(t).strip()][: Config.NUM_TOPICS]
+    logger.info("generate_topics: workspace %s -> %s", workspace_id, titles)
+    return titles
 
 
 def generate_flashcards(workspace_id, topic_title):

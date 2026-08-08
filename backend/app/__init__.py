@@ -1,3 +1,4 @@
+import logging
 import os
 
 from flask import Flask
@@ -6,10 +7,18 @@ from flask_cors import CORS
 from config import Config
 from app.extensions import db
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-def create_app():
+
+def create_app(run_checks=False):
     """Flask application factory. Also called from the Celery worker
-    (see app/tasks/celery_tasks.py) to get a DB-bound app context."""
+    (see app/tasks/celery_tasks.py) to get a DB-bound app context.
+
+    run_checks: log a preflight health check of Redis/Qdrant/Ollama/Celery
+    on startup. Only enabled for the actual API server (run.py) — the
+    Celery task also calls create_app() per-task, and re-running the
+    check there would just add latency to every single task.
+    """
     app = Flask(__name__)
     app.config.from_object(Config)
 
@@ -33,5 +42,17 @@ def create_app():
 
     with app.app_context():
         db.create_all()  # create tables on startup (no migrations in this project)
+
+    if run_checks:
+        from scripts.check_services import run_checks as _run_checks
+
+        failed = _run_checks()
+        if failed:
+            logging.warning(
+                "Startup check found %d problem(s): %s. Uploads will hang until these "
+                "are fixed — see `python scripts/check_services.py` for details.",
+                len(failed),
+                ", ".join(failed),
+            )
 
     return app
