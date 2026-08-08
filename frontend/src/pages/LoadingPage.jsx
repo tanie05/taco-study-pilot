@@ -1,27 +1,50 @@
 import { useEffect, useRef, useState } from "react";
-import { getWorkspaceStatus } from "../services/api";
+import { subscribeToWorkspaceEvents } from "../services/api";
+
+// Friendly fallback text per stage, used when the backend event doesn't
+// include its own `message` (e.g. workspaces created before stage_message
+// existed).
+const STAGE_MESSAGES = {
+  queued: "Getting ready...",
+  extracting: "Reading your files...",
+  embedding: "Indexing your content...",
+  generating_topics: "Building your study topics...",
+};
 
 export default function LoadingPage({ workspaceId, onReady, onFailed }) {
   const [message, setMessage] = useState("Ingestion in progress...");
-  const pollRef = useRef(null);
+  const unsubscribeRef = useRef(null);
 
   useEffect(() => {
-    pollRef.current = setInterval(async () => {
-      try {
-        const data = await getWorkspaceStatus(workspaceId);
-        if (data.status === "ready") {
-          clearInterval(pollRef.current);
-          onReady();
-        } else if (data.status === "failed") {
-          clearInterval(pollRef.current);
-          onFailed(data.error_message || "Ingestion failed.");
-        }
-      } catch {
-        setMessage("Having trouble checking status, retrying...");
-      }
-    }, 2000);
+    unsubscribeRef.current = subscribeToWorkspaceEvents(workspaceId, {
+      onEvent: (payload) => {
+        const { track, stage, message: stageMessage, error } = payload;
+        // This page only cares about ingestion (chat unlocks as soon as
+        // it's ready); topic generation is tracked separately once the
+        // user reaches WorkspacePage.
+        if (track !== "ingestion") return;
 
-    return () => clearInterval(pollRef.current);
+        if (stage === "ready") {
+          unsubscribeRef.current?.();
+          onReady();
+          return;
+        }
+        if (stage === "failed") {
+          unsubscribeRef.current?.();
+          onFailed(error || "Ingestion failed.");
+          return;
+        }
+
+        setMessage(stageMessage || STAGE_MESSAGES[stage] || "Ingestion in progress...");
+      },
+      onError: () => {
+        // EventSource retries the connection automatically; just reflect
+        // the hiccup in the UI while it does.
+        setMessage("Having trouble connecting, retrying...");
+      },
+    });
+
+    return () => unsubscribeRef.current?.();
   }, [workspaceId, onReady, onFailed]);
 
   return (

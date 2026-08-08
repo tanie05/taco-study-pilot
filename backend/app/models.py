@@ -16,7 +16,21 @@ class Workspace(db.Model):
 
     id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
     status = db.Column(db.String(20), nullable=False, default="processing")
+    # Ingestion pipeline stage: queued -> extracting -> embedding ->
+    # ready/failed. This alone gates chat availability. Kept in sync with
+    # the "ingestion" track published over pub/sub (see
+    # app/services/events.py) so a client that connects late still sees the
+    # current stage.
+    stage = db.Column(db.String(30), nullable=False, default="queued")
+    stage_message = db.Column(db.Text, nullable=True)
     error_message = db.Column(db.Text, nullable=True)
+    # Topic/flashcard generation runs after ingestion and is tracked
+    # independently: pending -> generating -> ready/failed. A topics
+    # failure never touches `status`/`stage` above — chat stays usable
+    # even if topic generation fails. Published as the "topics" track.
+    topics_stage = db.Column(db.String(20), nullable=False, default="pending")
+    topics_message = db.Column(db.Text, nullable=True)
+    topics_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     files = db.relationship("ResourceFile", backref="workspace", cascade="all, delete-orphan")
@@ -26,7 +40,12 @@ class Workspace(db.Model):
         return {
             "id": self.id,
             "status": self.status,
+            "stage": self.stage,
+            "stage_message": self.stage_message,
             "error_message": self.error_message,
+            "topics_stage": self.topics_stage,
+            "topics_message": self.topics_message,
+            "topics_error": self.topics_error,
             "created_at": self.created_at.isoformat(),
         }
 

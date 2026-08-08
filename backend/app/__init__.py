@@ -10,6 +10,29 @@ from app.extensions import db
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def _add_missing_columns():
+    """db.create_all() only creates tables that don't exist yet — it won't
+    add new columns to a table from an earlier version of the schema (and
+    this project has no migration tool). Patch those in with a plain
+    ALTER TABLE so existing SQLite files (e.g. instance/app.db) pick up new
+    columns like Workspace.stage without needing to delete the DB."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    existing_columns = {col["name"] for col in inspector.get_columns("workspaces")}
+    if "stage" not in existing_columns:
+        db.session.execute(text("ALTER TABLE workspaces ADD COLUMN stage VARCHAR(30) DEFAULT 'queued'"))
+    if "stage_message" not in existing_columns:
+        db.session.execute(text("ALTER TABLE workspaces ADD COLUMN stage_message TEXT"))
+    if "topics_stage" not in existing_columns:
+        db.session.execute(text("ALTER TABLE workspaces ADD COLUMN topics_stage VARCHAR(20) DEFAULT 'pending'"))
+    if "topics_message" not in existing_columns:
+        db.session.execute(text("ALTER TABLE workspaces ADD COLUMN topics_message TEXT"))
+    if "topics_error" not in existing_columns:
+        db.session.execute(text("ALTER TABLE workspaces ADD COLUMN topics_error TEXT"))
+    db.session.commit()
+
+
 def create_app(run_checks=False):
     """Flask application factory. Also called from the Celery worker
     (see app/tasks/celery_tasks.py) to get a DB-bound app context.
@@ -42,6 +65,7 @@ def create_app(run_checks=False):
 
     with app.app_context():
         db.create_all()  # create tables on startup (no migrations in this project)
+        _add_missing_columns()  # patch columns onto tables that already existed
 
     if run_checks:
         from scripts.check_services import run_checks as _run_checks

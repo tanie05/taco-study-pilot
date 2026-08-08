@@ -1,8 +1,14 @@
-export default function TopicSidebar({ topics, onSelectTopic }) {
+export default function TopicSidebar({ topics, topicsStage, topicsError, onSelectTopic }) {
   return (
     <div className="topic-sidebar">
       <h3>Flashcard Topics</h3>
-      {topics.length === 0 && <p className="muted">No topics found.</p>}
+      {(topicsStage === "pending" || topicsStage === "generating") && (
+        <p className="muted">Generating study topics...</p>
+      )}
+      {topicsStage === "failed" && (
+        <p className="error">{topicsError || "Couldn't generate topics."}</p>
+      )}
+      {topicsStage === "ready" && topics.length === 0 && <p className="muted">No topics found.</p>}
       <ul>
         {topics.map((topic) => (
           <li key={topic.id}>
