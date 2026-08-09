@@ -8,6 +8,28 @@ def gen_uuid():
     return str(uuid.uuid4())
 
 
+class User(db.Model):
+    """A minimal account model. Guests (anyone browsing without signing up)
+    are lazily-created rows here too — is_guest=True, identified by the
+    guest_id cookie value (see app/services/auth.py) rather than
+    email/password. A future real signup flow just fills in
+    email/password_hash on the same row, so no data migration is needed
+    when a guest eventually creates a real account."""
+
+    __tablename__ = "users"
+
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    is_guest = db.Column(db.Boolean, nullable=False, default=True)
+    guest_id = db.Column(db.String(36), unique=True, nullable=True)
+    email = db.Column(db.String(255), unique=True, nullable=True)
+    password_hash = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # No cascade here — deleting a User isn't a supported flow yet, so we
+    # don't want an accidental User delete to silently wipe workspaces.
+    workspaces = db.relationship("Workspace", backref="user")
+
+
 class Workspace(db.Model):
     """One upload session: a set of PDFs plus the topics generated from them.
     status moves processing -> ready (or failed) as the Celery task runs."""
@@ -15,6 +37,10 @@ class Workspace(db.Model):
     __tablename__ = "workspaces"
 
     id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    # Nullable so pre-existing rows from before this column existed don't
+    # break; they just become inaccessible orphans (no route can match them
+    # since ownership checks require an exact user_id match).
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="processing")
     # Ingestion pipeline stage: queued -> extracting -> embedding ->
     # ready/failed. This alone gates chat availability. Kept in sync with

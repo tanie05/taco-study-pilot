@@ -69,6 +69,21 @@ button:disabled {
   color: #d64545;
 }
 
+.btn-danger {
+  background: #d64545;
+}
+
+.btn-danger:hover {
+  background: #b53a3a;
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 0 16px;
+}
+
 .muted {
   color: #888;
 }

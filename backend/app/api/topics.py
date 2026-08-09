@@ -1,7 +1,7 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, g, jsonify
 
 from app.extensions import db
-from app.models import Flashcard, Topic
+from app.models import Flashcard, Topic, Workspace
 from app.services.topics import generate_flashcards
 
 topics_bp = Blueprint("topics", __name__)
@@ -13,6 +13,10 @@ def generate(topic_id):
     Results are cached in the flashcards table so repeat requests skip the LLM."""
     topic = db.session.get(Topic, topic_id)
     if topic is None:
+        return jsonify({"error": "Topic not found"}), 404
+
+    workspace = db.session.get(Workspace, topic.workspace_id)
+    if workspace is None or workspace.user_id != g.current_user.id:
         return jsonify({"error": "Topic not found"}), 404
 
     if topic.flashcards:

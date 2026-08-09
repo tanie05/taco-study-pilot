@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.extensions import db
 from app.models import Workspace
@@ -19,7 +19,7 @@ def chat():
         return jsonify({"error": "workspace_id and message are required"}), 400
 
     workspace = db.session.get(Workspace, workspace_id)
-    if workspace is None:
+    if workspace is None or workspace.user_id != g.current_user.id:
         return jsonify({"error": "Workspace not found"}), 404
     if workspace.status != "ready":
         return jsonify({"error": f"Workspace is not ready (status: {workspace.status})"}), 409

@@ -30,6 +30,8 @@ def _add_missing_columns():
         db.session.execute(text("ALTER TABLE workspaces ADD COLUMN topics_message TEXT"))
     if "topics_error" not in existing_columns:
         db.session.execute(text("ALTER TABLE workspaces ADD COLUMN topics_error TEXT"))
+    if "user_id" not in existing_columns:
+        db.session.execute(text("ALTER TABLE workspaces ADD COLUMN user_id VARCHAR(36)"))
     db.session.commit()
 
 
@@ -49,7 +51,10 @@ def create_app(run_checks=False):
     os.makedirs(Config.STORAGE_DIR, exist_ok=True)
     os.makedirs(os.path.join(os.path.dirname(__file__), "..", "instance"), exist_ok=True)
 
-    CORS(app)  # allow the Vite frontend (different origin) to call this API
+    # supports_credentials + an explicit origin (not "*") are required for
+    # the guest_id cookie (see app/services/auth.py) to flow with
+    # cross-origin requests from the Vite dev server.
+    CORS(app, supports_credentials=True, origins=["http://localhost:5173"])
     db.init_app(app)
 
     # Blueprints are the API route groups, one per feature area.
@@ -62,6 +67,13 @@ def create_app(run_checks=False):
     app.register_blueprint(workspace_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(topics_bp)
+
+    # Resolves g.current_user (a guest, for now) on every request; see
+    # app/services/auth.py.
+    from app.services.auth import resolve_current_user, set_guest_cookie
+
+    app.before_request(resolve_current_user)
+    app.after_request(set_guest_cookie)
 
     with app.app_context():
         db.create_all()  # create tables on startup (no migrations in this project)
