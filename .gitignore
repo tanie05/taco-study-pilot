@@ -5,4 +5,4 @@ storage
 .db
 node_modules
 .venv
-__pycache__
+__pycache__.superpowers/
