@@ -27,11 +27,11 @@ export default function UploadDropzone({ onFilesSelected }) {
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
-      <p>Drag & drop PDF files here, or</p>
       <label className="file-picker">
-        Choose files
+        📎 Attach files
         <input type="file" accept=".pdf" multiple hidden onChange={handleChange} />
       </label>
+      <span className="dropzone-hint">or drag & drop PDFs here</span>
     </div>
   );
 }

@@ -72,6 +72,7 @@ class Workspace(db.Model):
             "topics_stage": self.topics_stage,
             "topics_message": self.topics_message,
             "topics_error": self.topics_error,
+            "file_count": len(self.files),
             "created_at": self.created_at.isoformat(),
         }
 

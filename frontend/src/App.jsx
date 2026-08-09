@@ -1,14 +1,21 @@
-import { useEffect, useState } from "react";
-import UploadPage from "./pages/UploadPage";
-import LoadingPage from "./pages/LoadingPage";
-import WorkspacePage from "./pages/WorkspacePage";
-import { getMyWorkspace } from "./services/api";
+import { useCallback, useEffect, useState } from "react";
+import Sidebar from "./components/Sidebar";
+import ChatPage from "./pages/ChatPage";
+import FlashcardsPage from "./pages/FlashcardsPage";
+import AddFilesModal from "./components/AddFilesModal";
+import ConfirmDialog from "./components/ConfirmDialog";
+import { addFiles, deleteWorkspace, getMyWorkspace } from "./services/api";
 import "./App.css";
 
 export default function App() {
   const [workspaceId, setWorkspaceId] = useState(null);
   const [stage, setStage] = useState("checking"); // checking | upload | loading | ready | failed
   const [errorMessage, setErrorMessage] = useState(null);
+  const [fileCount, setFileCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState("chat"); // chat | flashcards
+  const [showAddFiles, setShowAddFiles] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // The guest_id cookie (see backend/app/services/auth.py) lets the
   // backend recognize a returning guest's workspace, so on load we check
@@ -17,6 +24,7 @@ export default function App() {
     getMyWorkspace()
       .then((workspace) => {
         setWorkspaceId(workspace.id);
+        setFileCount(workspace.file_count);
         if (workspace.status === "processing") {
           setStage("loading");
         } else if (workspace.status === "ready") {
@@ -31,56 +39,93 @@ export default function App() {
       .catch(() => setStage("upload"));
   }, []);
 
-  if (stage === "checking") {
-    return (
-      <div className="page loading-page">
-        <div className="spinner" />
-      </div>
-    );
+  function handleUploaded(id, count) {
+    setWorkspaceId(id);
+    setFileCount(count);
+    setStage("loading");
+    setCurrentPage("chat");
   }
 
-  if (stage === "upload") {
-    return (
-      <UploadPage
-        onUploaded={(id) => {
-          setWorkspaceId(id);
-          setStage("loading");
-        }}
-      />
-    );
+  async function handleAddFiles(files) {
+    await addFiles(workspaceId, files);
+    setShowAddFiles(false);
+    setStage("loading");
+    setCurrentPage("chat");
   }
 
-  if (stage === "loading") {
-    return (
-      <LoadingPage
-        workspaceId={workspaceId}
-        onReady={() => setStage("ready")}
-        onFailed={(msg) => {
-          setErrorMessage(msg);
-          setStage("failed");
-        }}
-      />
-    );
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteWorkspace(workspaceId);
+      setWorkspaceId(null);
+      setFileCount(0);
+      setStage("upload");
+      setCurrentPage("chat");
+    } catch {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   }
 
-  if (stage === "failed") {
-    return (
-      <div className="page">
-        <h2>Something went wrong</h2>
-        <p className="error">{errorMessage}</p>
-        <button onClick={() => setStage("upload")}>Try again</button>
-      </div>
-    );
-  }
+  // Stable references: ChatPage's SSE-subscription effect depends on these
+  // callbacks, so without useCallback a fresh closure on every App render
+  // (e.g. from opening the Add Files / Delete Workspace dialogs) would
+  // re-run that effect and needlessly tear down and reopen the EventSource
+  // connection while ingestion is still in progress.
+  const handleReady = useCallback(() => setStage("ready"), []);
+  const handleFailed = useCallback((msg) => {
+    setErrorMessage(msg);
+    setStage("failed");
+  }, []);
+  const handleRetry = useCallback(() => setStage("upload"), []);
+
+  const hasWorkspace = stage === "loading" || stage === "ready" || stage === "failed";
+  const workspace = hasWorkspace
+    ? { fileCount, status: stage === "loading" ? "processing" : stage }
+    : null;
+  const flashcardsEnabled = stage === "ready";
 
   return (
-    <WorkspacePage
-      workspaceId={workspaceId}
-      onDeleted={() => {
-        setWorkspaceId(null);
-        setStage("upload");
-      }}
-      onFilesAdded={() => setStage("loading")}
-    />
+    <div className="app-shell">
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        workspace={workspace}
+        flashcardsEnabled={flashcardsEnabled}
+        onAddFiles={() => setShowAddFiles(true)}
+        onDeleteWorkspace={() => setShowDeleteConfirm(true)}
+      />
+
+      <main className="app-main">
+        {currentPage === "flashcards" && flashcardsEnabled ? (
+          <FlashcardsPage workspaceId={workspaceId} />
+        ) : (
+          <ChatPage
+            stage={stage}
+            workspaceId={workspaceId}
+            errorMessage={errorMessage}
+            onUploaded={handleUploaded}
+            onReady={handleReady}
+            onFailed={handleFailed}
+            onRetry={handleRetry}
+          />
+        )}
+      </main>
+
+      {showAddFiles && (
+        <AddFilesModal onSubmit={handleAddFiles} onClose={() => setShowAddFiles(false)} />
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete workspace?"
+          message="This permanently deletes all files, topics, and flashcards in this workspace."
+          confirmLabel="Delete"
+          confirming={deleting}
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDelete}
+        />
+      )}
+    </div>
   );
 }

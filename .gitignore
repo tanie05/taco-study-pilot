@@ -6,3 +6,4 @@ storage
 node_modules
 .venv
 __pycache__.superpowers/
+*.pyc
