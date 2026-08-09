@@ -1,0 +1,120 @@
+import uuid
+from datetime import datetime
+
+from app.extensions import db
+
+
+def gen_uuid():
+    return str(uuid.uuid4())
+
+
+class User(db.Model):
+    """A minimal account model. Guests (anyone browsing without signing up)
+    are lazily-created rows here too — is_guest=True, identified by the
+    guest_id cookie value (see app/services/auth.py) rather than
+    email/password. A future real signup flow just fills in
+    email/password_hash on the same row, so no data migration is needed
+    when a guest eventually creates a real account."""
+
+    __tablename__ = "users"
+
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    is_guest = db.Column(db.Boolean, nullable=False, default=True)
+    guest_id = db.Column(db.String(36), unique=True, nullable=True)
+    email = db.Column(db.String(255), unique=True, nullable=True)
+    password_hash = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # No cascade here — deleting a User isn't a supported flow yet, so we
+    # don't want an accidental User delete to silently wipe workspaces.
+    workspaces = db.relationship("Workspace", backref="user")
+
+
+class Workspace(db.Model):
+    """One upload session: a set of PDFs plus the topics generated from them.
+    status moves processing -> ready (or failed) as the Celery task runs."""
+
+    __tablename__ = "workspaces"
+
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    # Nullable so pre-existing rows from before this column existed don't
+    # break; they just become inaccessible orphans (no route can match them
+    # since ownership checks require an exact user_id match).
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="processing")
+    # Ingestion pipeline stage: queued -> extracting -> embedding ->
+    # ready/failed. This alone gates chat availability. Kept in sync with
+    # the "ingestion" track published over pub/sub (see
+    # app/services/events.py) so a client that connects late still sees the
+    # current stage.
+    stage = db.Column(db.String(30), nullable=False, default="queued")
+    stage_message = db.Column(db.Text, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    # Topic/flashcard generation runs after ingestion and is tracked
+    # independently: pending -> generating -> ready/failed. A topics
+    # failure never touches `status`/`stage` above — chat stays usable
+    # even if topic generation fails. Published as the "topics" track.
+    topics_stage = db.Column(db.String(20), nullable=False, default="pending")
+    topics_message = db.Column(db.Text, nullable=True)
+    topics_error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    files = db.relationship("ResourceFile", backref="workspace", cascade="all, delete-orphan")
+    topics = db.relationship("Topic", backref="workspace", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "status": self.status,
+            "stage": self.stage,
+            "stage_message": self.stage_message,
+            "error_message": self.error_message,
+            "topics_stage": self.topics_stage,
+            "topics_message": self.topics_message,
+            "topics_error": self.topics_error,
+            "file_count": len(self.files),
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+class ResourceFile(db.Model):
+    """A single uploaded PDF belonging to a workspace; storage_path points
+    into Config.STORAGE_DIR on disk."""
+
+    __tablename__ = "resource_files"
+
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    workspace_id = db.Column(db.String(36), db.ForeignKey("workspaces.id"), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    storage_path = db.Column(db.String(500), nullable=False)
+
+
+class Topic(db.Model):
+    """An LLM-generated study topic for a workspace. Flashcards are generated
+    on demand from a topic (see app/services/topics.py) and cached in the
+    flashcards table so repeat requests don't hit the LLM again."""
+
+    __tablename__ = "topics"
+
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    workspace_id = db.Column(db.String(36), db.ForeignKey("workspaces.id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+
+    flashcards = db.relationship("Flashcard", backref="topic", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {"id": self.id, "title": self.title}
+
+
+class Flashcard(db.Model):
+    """A single question/answer flashcard generated for a topic."""
+
+    __tablename__ = "flashcards"
+
+    id = db.Column(db.String(36), primary_key=True, default=gen_uuid)
+    topic_id = db.Column(db.String(36), db.ForeignKey("topics.id"), nullable=False)
+    question = db.Column(db.Text, nullable=False)
+    answer = db.Column(db.Text, nullable=False)
+
+    def to_dict(self):
+        return {"question": self.question, "answer": self.answer}
