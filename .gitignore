@@ -2,8 +2,8 @@ venv
 *.pdf
 storage
 .env
-.db
+*.db
 node_modules
 .venv
 *.pyc
-
+instance

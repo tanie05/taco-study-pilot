@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import tacoLogo from "../assets/taco.png";
 
 // Persistent left nav shown on both the Chat and Flashcards pages. Only
 // ever shows one workspace today (one-workspace-per-user is a hard backend
@@ -44,21 +45,24 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">🌮 taco</div>
+      <div className="sidebar-logo">
+        <img src={tacoLogo} alt="Taco Study Pilot" />
+        taco study
+      </div>
 
       <nav className="sidebar-nav">
         <button
           className={`sidebar-nav-item ${currentPage === "chat" ? "active" : ""}`}
           onClick={() => onNavigate("chat")}
         >
-          💬 Chat
+          Chat
         </button>
         <button
           className={`sidebar-nav-item ${currentPage === "flashcards" ? "active" : ""}`}
           onClick={() => onNavigate("flashcards")}
           disabled={!flashcardsEnabled}
         >
-          🎴 Flashcards
+          Flashcards
         </button>
       </nav>
 

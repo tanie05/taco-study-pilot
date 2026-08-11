@@ -97,9 +97,11 @@ export default function App() {
       />
 
       <main className="app-main">
-        {currentPage === "flashcards" && flashcardsEnabled ? (
-          <FlashcardsPage workspaceId={workspaceId} />
-        ) : (
+        {/* Both pages stay mounted once reachable so switching between them
+            (via the sidebar nav) doesn't tear down and lose in-progress
+            state — e.g. ChatWindow's message history. Visibility is toggled
+            with CSS instead of conditional rendering. */}
+        <div className="app-main-page" hidden={currentPage === "flashcards" && flashcardsEnabled}>
           <ChatPage
             stage={stage}
             workspaceId={workspaceId}
@@ -109,6 +111,12 @@ export default function App() {
             onFailed={handleFailed}
             onRetry={handleRetry}
           />
+        </div>
+
+        {flashcardsEnabled && (
+          <div className="app-main-page" hidden={currentPage !== "flashcards"}>
+            <FlashcardsPage workspaceId={workspaceId} />
+          </div>
         )}
       </main>
 

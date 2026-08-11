@@ -46,8 +46,14 @@ export default function FlashcardViewer({ topic }) {
 
       {!loading && !error && current && (
         <>
-          <div className="flashcard" onClick={() => setFlipped((f) => !f)}>
-            {flipped ? current.answer : current.question}
+          <div
+            className={`flashcard ${flipped ? "flipped" : ""}`}
+            onClick={() => setFlipped((f) => !f)}
+          >
+            <div className="flashcard-inner">
+              <div className="flashcard-face flashcard-face-front">{current.question}</div>
+              <div className="flashcard-face flashcard-face-back">{current.answer}</div>
+            </div>
           </div>
           <div className="flashcard-controls">
             <button
