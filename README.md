@@ -1,3 +1,5 @@
+<img width="48" height="42" alt="taco" src="https://github.com/user-attachments/assets/a8824990-ce80-4ea4-9214-8af8ec18e08a" />
+
 # Taco Study Pilot
 
 An AI study companion that turns your PDFs into a chatbot and flashcards.
